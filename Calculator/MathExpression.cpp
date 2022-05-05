@@ -155,7 +155,7 @@ std::list<std::unique_ptr<Token>> Parse(std::string& expression)
     return output;
 }
 
-double Calculate(std::list<std::unique_ptr<Token>> output)
+float100 Calculate(std::list<std::unique_ptr<Token>> output)
 {
     //There will be one item at the end
     while (output.size() != 1)
@@ -170,16 +170,18 @@ double Calculate(std::list<std::unique_ptr<Token>> output)
         if (oper == output.end())
             throw std::logic_error("Not enough operators for values");
 
-        std::list< std::unique_ptr<Token>>::iterator firstValue;
-        std::list< std::unique_ptr<Token>>::iterator secondValue;
+        //Not using std::prev because of bad error handling
+        auto Decrement = [&output](std::list< std::unique_ptr<Token>>::iterator& iter) 
+        {
+            if (iter == output.begin())
+                throw std::logic_error("Not enough values for operation");
+            return --iter;
+        };
+        std::list< std::unique_ptr<Token>>::iterator tmp = oper;
 
-        try {
-            firstValue = std::prev(oper, 2);
-            secondValue = std::prev(oper, 1);
-        }
-        catch (...) {
-            throw std::logic_error("Not enough values before operator");
-        }
+        //Supports only binary operations
+        std::list< std::unique_ptr<Token>>::iterator secondValue = Decrement(tmp);
+        std::list< std::unique_ptr<Token>>::iterator firstValue = Decrement(tmp);
 
         if (!(*firstValue)->isOperator()
             && !(*secondValue)->isOperator())
@@ -205,24 +207,24 @@ Value DoOperation(std::unique_ptr<Token>& firstValue,
                   std::unique_ptr<Token>& secondValue,
                   std::unique_ptr<Token>& _oper)
 {
-    auto fValue = static_cast<Value*>(firstValue.get());
-    auto sValue = static_cast<Value*>(secondValue.get());
-    auto oper = static_cast<Operator*>(_oper.get());
-    
-    if (oper->getOperator()[0] == '+')
-        return Value(fValue->getValue() + sValue->getValue());
+    auto& fValue = static_cast<Value*>(firstValue.get())->getValue();
+    auto& sValue = static_cast<Value*>(secondValue.get())->getValue();
+    auto& oper = static_cast<Operator*>(_oper.get())->getOperator();
 
-    if (oper->getOperator()[0] == '-')
-        return Value(fValue->getValue() - sValue->getValue());
+    if (oper[0] == '+')
+        return Value(fValue + sValue);
 
-    if (oper->getOperator()[0] == '*')
-        return Value(fValue->getValue() * sValue->getValue());
+    if (oper[0] == '-')
+        return Value(fValue - sValue);
 
-    if (oper->getOperator()[0] == '/')
-        return Value(fValue->getValue() / sValue->getValue());
+    if (oper[0] == '*')
+        return Value(fValue * sValue);
 
-    if (oper->getOperator()[0] == '^')
-        return Value(std::pow(fValue->getValue(), sValue->getValue()));
+    if (oper[0] == '/')
+        return Value(fValue / sValue);
+
+    if (oper[0] == '^')
+        return Value(boost::multiprecision::pow(fValue, sValue));
 }
 
 void AddOperator(std::list<std::unique_ptr<Token>>& output,

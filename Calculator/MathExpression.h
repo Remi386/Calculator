@@ -3,6 +3,9 @@
 #include <list>
 #include <stdexcept>
 #include <memory>
+#include <boost/multiprecision/cpp_dec_float.hpp>
+
+using float100 = boost::multiprecision::cpp_dec_float_100;
 
 class Token
 {
@@ -54,11 +57,11 @@ private:
 class Value : public Token
 {
 public:
-	Value(double _value)
+	Value(float100 _value)
 		:value(_value)
 	{}
 
-	double getValue()
+	const float100& getValue()
 	{
 		return value;
 	}
@@ -69,7 +72,7 @@ public:
 	};
 
 private:
-	double value;
+	float100 value;
 };
 
 int HandleOperator(std::string& str, size_t offset);
@@ -84,7 +87,7 @@ bool IsOperator(std::string& str);
 
 std::list<std::unique_ptr<Token>> Parse(std::string& expression);
 
-double Calculate(std::list<std::unique_ptr<Token>> output);
+float100 Calculate(std::list<std::unique_ptr<Token>> output);
 
 void AddOperator(std::list<std::unique_ptr<Token>>& output,
 	std::list<Operator>& operators, Operator oper);

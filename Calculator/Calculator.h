@@ -10,6 +10,9 @@ private:
     QLineEdit* display;
     QString displayContent;
 
+protected:
+    virtual void keyPressEvent(QKeyEvent* ke);
+
 public:
     Calculator(QWidget *parent = Q_NULLPTR);
 

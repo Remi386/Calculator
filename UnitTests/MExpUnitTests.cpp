@@ -18,8 +18,16 @@ BOOST_AUTO_TEST_CASE(AppropriateViewTest)
 	AppropriateView(test2);
 	BOOST_CHECK(test2 == std::string("( 1 - 7 / 9 ) "));
 
-	std::string test3 = "+ 1 2";
-	BOOST_CHECK_THROW(AppropriateView(test3), std::logic_error);
+	std::string test3 = " 1.6 ^ 43.9   ";
+	AppropriateView(test3);
+	BOOST_CHECK(test3 == std::string("1.6 ^ 43.9 "));
+
+	std::string test4 = "(9.7 * 1.5) - (1.3 + 2)";
+	AppropriateView(test4);
+	BOOST_CHECK(test4 == std::string("( 9.7 * 1.5 ) - ( 1.3 + 2 ) "));
+
+	std::string test5 = "+ 1 2";
+	BOOST_CHECK_THROW(AppropriateView(test5), std::logic_error);
 }
 
 BOOST_AUTO_TEST_CASE(CalculateTest)
@@ -42,15 +50,18 @@ BOOST_AUTO_TEST_CASE(CalculateTest)
 	std::string expression5 = "3 + 4 * 2 / (1 - 5)^2";
 	BOOST_CHECK_CLOSE(Calculate(Parse(expression5)), 3.5, precision);
 
-	std::string expression6 = " - 4^3 * 2^7 - 9";
-	BOOST_CHECK_THROW(Calculate(Parse(expression6)), std::logic_error);
+	std::string expression6 = "5.6 + 4.4 * 2 / (5.1 - 1.7)^2.7";
+	BOOST_CHECK_CLOSE(Calculate(Parse(expression6)), 5.92321357741, precision);
 
-	std::string expression7 = " (2^7 - 9";
+	std::string expression7 = " - 4^3 * 2^7 - 9";
 	BOOST_CHECK_THROW(Calculate(Parse(expression7)), std::logic_error);
 
-	std::string expression8 = " 2^7) - 9";
+	std::string expression8 = " (2^7 - 9";
 	BOOST_CHECK_THROW(Calculate(Parse(expression8)), std::logic_error);
 
-	std::string expression9 = "5 + -2";
+	std::string expression9 = " 2^7) - 9";
 	BOOST_CHECK_THROW(Calculate(Parse(expression9)), std::logic_error);
+
+	std::string expression10 = "5 + -2";
+	BOOST_CHECK_THROW(Calculate(Parse(expression10)), std::logic_error);
 }
