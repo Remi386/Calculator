@@ -2,52 +2,81 @@
 #include <regex>
 #include <vector>
 
-std::regex operators("[-*/+)(^]");
+const std::regex operators("(log|ln|sqrt|sin|cos|tan|[-*/+)(!^])");
+const std::regex binaryOperators("[-*/+)(^]");
+const std::regex unaryOperators("(log|ln|sqrt|sin|cos|tan|!)");
 
-int HandleOperator(std::string& str, size_t offset)
+Operator::Operator(std::string s, OperatorType _type)
+    : oper(s), operType(_type)
 {
-    int spacesCount = 0;
-    //After
-    if (str.at(offset + 1) != ' ') {
-        str.insert(offset + 1, 1, ' ');
-        ++spacesCount;
-    }
-    //Before
-    if (str.at(offset - 1) != ' ') {
-        str.insert(offset, 1, ' ');
-        ++spacesCount;
-    }
+    if (operType == OperatorType::binary) {
 
-    return spacesCount;
-}
-
-int HandleBracket(std::string& str, size_t offset)
-{
-    int spacesCount = 0;
-
-    if (str[offset] == '(') {
-        //After
-        if (str.at(offset + 1) != ' ') {
-            str.insert(offset + 1, 1, ' ');
-            ++spacesCount;
-        }
-        //Before
-        if (offset != 0) {
-            str.insert(offset, 1, ' ');
-            ++spacesCount;
-        }
+        if (oper.compare("(") == 0 || oper.compare(")") == 0)
+            priority = -1;
+        else if (oper.compare("+") == 0 || oper.compare("-") == 0)
+            priority = 0;
+        else if (oper.compare("*") == 0 || oper.compare("/") == 0)
+            priority = 1;
+        else if (oper.compare("^") == 0) 
+            priority = 2;
     }
     else {
-        //After
-        if (offset != str.size() - 1) {
-            str.insert(offset + 1, 1, ' ');
-            ++spacesCount;
-        }
-        //Before
-        if (str.at(offset - 1) != ' ') {
-            str.insert(offset, 1, ' ');
-            ++spacesCount;
-        }
+        if (oper.compare("sin") == 0 || oper.compare("cos") == 0 ||
+            oper.compare("tan") == 0 || oper.compare("!") == 0 ||
+            oper.compare("log") == 0 || oper.compare("ln") == 0 ||
+            oper.compare("sqrt") == 0)
+            priority = 3;
+
+        if (oper.compare("-") == 0)
+            priority = 4;
+    }
+
+    if(priority == -10) //if priority has default value
+        throw std::logic_error("Wrong operator: " + oper);
+}
+
+Operator MakeOperator(const std::string& str, bool isPrevOperator)
+{
+    //unary minus
+    if (isPrevOperator && str.compare("-") == 0)
+        return Operator(str, Operator::OperatorType::unary);
+
+    if (std::regex_match(str, binaryOperators))
+        return Operator(str, Operator::OperatorType::binary);
+
+    if (std::regex_match(str, unaryOperators))
+        return Operator(str, Operator::OperatorType::unary);
+
+    throw std::logic_error("Wrong operator: " + str);
+}
+
+size_t getOperatorLength(const std::string& str, size_t offset)
+{
+    if (str.substr(offset, 2) == "ln")
+        return 1;
+
+    if (str.substr(offset, 3) == "cos" || str.substr(offset, 3) == "sin" ||
+        str.substr(offset, 3) == "tan" || str.substr(offset, 3) == "log")
+        return 2;
+
+    if (str.substr(offset, 4) == "sqrt")
+        return 3;
+
+    return 0;
+}
+
+int HandleToken(std::string& str, size_t offset, size_t length)
+{
+    int spacesCount = 0;
+
+    if (offset + length + 1 < str.size() && str[offset + length + 1] != ' ') {
+        str.insert(offset + length + 1, 1, ' ');
+        ++spacesCount;
+    }
+
+    if (offset >= 1 && str[offset - 1] != ' ') {
+        str.insert(offset, 1, ' ');
+        ++spacesCount;
     }
     return spacesCount;
 }
@@ -67,17 +96,12 @@ void AddSpaces(std::string& str)
     while (oper_begin != oper_end)
     {
         std::smatch match = *oper_begin;
-        size_t offset = match.position();
 
-        try {
-            if (str[offset] == '(' || str[offset] == ')')
-                spacesCount += HandleBracket(copy, offset + spacesCount);
-            else
-                spacesCount += HandleOperator(copy, offset + spacesCount);
-        }
-        catch (...) {
-            throw std::logic_error("Wrong position of operator");
-        }
+        size_t offset = match.position();
+        size_t length = getOperatorLength(str, offset);
+
+        spacesCount += HandleToken(copy, offset + spacesCount, length);
+
         ++oper_begin;
     }
     str = copy;
@@ -86,7 +110,7 @@ void AddSpaces(std::string& str)
 void AppropriateView(std::string& str)
 {
     //preventing allocations
-    str.reserve(str.size() * 2);
+    str.reserve(str.size() * 2 + 2);
 
     //This space at the end quite useful in finding algorithms
     if (str[str.size() - 1] != ' ')
@@ -112,7 +136,7 @@ void AppropriateView(std::string& str)
 
 bool IsOperator(std::string& str)
 {
-    if (str.size() > 1 || str.empty())
+    if (str.size() > 4 || str.empty())
         return false;
 
     return std::regex_search(str, operators);
@@ -125,16 +149,23 @@ std::list<std::unique_ptr<Token>> Parse(std::string& expression)
     std::list<std::unique_ptr<Token>> output;
     std::list<Operator> operators;
 
+    bool isPrevOperator = true;
+
     auto iterPrev = expression.begin();
     auto iterNext = std::find(expression.begin(), expression.end(), ' ');
 
     while (iterNext != expression.end())
     {
         std::string token(iterPrev, iterNext);
-        if (IsOperator(token))
-            AddOperator(output, operators, Operator(token));
-        else
-            output.push_back(std::make_unique<Value>(std::stod(token)));
+        if (IsOperator(token)) {
+            AddOperator(output, operators, MakeOperator(token, isPrevOperator));
+            if(token != "(" && token != ")")
+                isPrevOperator = true;
+        }
+        else {
+            output.push_back(std::make_unique<Value>(float100(token)));
+            isPrevOperator = false;
+        }
 
         iterPrev = iterNext + 1;
         iterNext = std::find(iterPrev, expression.end(), ' ');
@@ -171,38 +202,45 @@ float100 Calculate(std::list<std::unique_ptr<Token>> output)
             throw std::logic_error("Not enough operators for values");
 
         //Not using std::prev because of bad error handling
-        auto Decrement = [&output](std::list< std::unique_ptr<Token>>::iterator& iter) 
+        auto Decrement = [&output](std::list<std::unique_ptr<Token>>::iterator& iter)
         {
             if (iter == output.begin())
                 throw std::logic_error("Not enough values for operation");
             return --iter;
         };
-        std::list< std::unique_ptr<Token>>::iterator tmp = oper;
+        std::list<std::unique_ptr<Token>>::iterator tmp = oper;
 
-        //Supports only binary operations
-        std::list< std::unique_ptr<Token>>::iterator secondValue = Decrement(tmp);
-        std::list< std::unique_ptr<Token>>::iterator firstValue = Decrement(tmp);
+        std::list<std::unique_ptr<Token>>::iterator secondValue = output.end();
 
-        if (!(*firstValue)->isOperator()
-            && !(*secondValue)->isOperator())
-        {
-            std::unique_ptr<Token> result = std::make_unique<Value>(
-                    DoOperation(*firstValue, *secondValue, *oper)
-                );
+        //if operator is binary
+        if (static_cast<Operator*>(oper->get())->Type() == Operator::OperatorType::binary)
+            secondValue = Decrement(tmp); // than we have a second value
 
-            firstValue->swap(result);
+        std::list<std::unique_ptr<Token>>::iterator firstValue = Decrement(tmp);
 
-            output.erase(oper);
-            output.erase(secondValue);
-        }
-        else {
+        //if first value or second value are not really a values
+        if((*firstValue)->isOperator() && secondValue != output.end() && (*secondValue)->isOperator())
             throw std::logic_error("Wrong sequence!");
-        }
+
+        std::unique_ptr<Token> result;
+
+        if (secondValue != output.end())
+            result = std::make_unique<Value>(DoOperation(*firstValue, *secondValue, *oper));
+        else
+            result = std::make_unique<Value>(DoOperation(*firstValue, *oper));
+
+        firstValue->swap(result);
+        output.erase(oper);
+
+        if (secondValue != output.end())
+            output.erase(secondValue);
+
     }
 
     return ((Value*)output.front().get())->getValue();
 }
 
+//for biniry operators
 Value DoOperation(std::unique_ptr<Token>& firstValue,
                   std::unique_ptr<Token>& secondValue,
                   std::unique_ptr<Token>& _oper)
@@ -211,24 +249,61 @@ Value DoOperation(std::unique_ptr<Token>& firstValue,
     auto& sValue = static_cast<Value*>(secondValue.get())->getValue();
     auto& oper = static_cast<Operator*>(_oper.get())->getOperator();
 
-    if (oper[0] == '+')
+    if (oper.compare("+") == 0)
         return Value(fValue + sValue);
 
-    if (oper[0] == '-')
+    if (oper.compare("-") == 0)
         return Value(fValue - sValue);
 
-    if (oper[0] == '*')
+    if (oper.compare("*") == 0)
         return Value(fValue * sValue);
 
-    if (oper[0] == '/')
+    if (oper.compare("/") == 0)
         return Value(fValue / sValue);
 
-    if (oper[0] == '^')
+    if (oper.compare("^") == 0)
         return Value(boost::multiprecision::pow(fValue, sValue));
+
+    throw std::logic_error("Wrong operator: " + oper);
 }
 
+//for unary operators
+Value DoOperation(std::unique_ptr<Token>& _value,
+                  std::unique_ptr<Token>& _oper)
+{
+    auto& value = static_cast<Value*>(_value.get())->getValue();
+    auto& oper = static_cast<Operator*>(_oper.get())->getOperator();
+
+    if (oper.compare("!") == 0)
+        return Value(boost::math::tgamma(value + 1));
+
+    if (oper.compare("sin") == 0)
+        return Value(boost::multiprecision::sin(value));
+    
+    if (oper.compare("cos") == 0)
+        return Value(boost::multiprecision::cos(value));
+
+    if (oper.compare("tan") == 0)
+        return Value(boost::multiprecision::tan(value));
+
+    if (oper.compare("sqrt") == 0)
+        return Value(boost::multiprecision::sqrt(value));
+
+    if (oper.compare("log") == 0)
+        return Value(boost::multiprecision::log10(value));
+
+    if (oper.compare("ln") == 0)
+        return Value(boost::multiprecision::log(value));
+
+    if (oper.compare("-") == 0)
+        return Value(-value);
+
+    throw std::logic_error("Wrong operator: " + oper);
+}
+
+
 void AddOperator(std::list<std::unique_ptr<Token>>& output,
-    std::list<Operator>& operators, Operator oper)
+                 std::list<Operator>& operators, Operator oper)
 {
     if (oper.getOperator()[0] == ')') {
         while (true) {

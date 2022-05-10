@@ -1,7 +1,11 @@
 #pragma once
 
-#include <QtWidgets>
-//#include "ui_calculator.h"
+#include <QtWidgets/QWidget>
+#include <boost/multiprecision/cpp_dec_float.hpp>
+using float100 = boost::multiprecision::cpp_dec_float_100;
+
+class QLineEdit;
+class QPushButton;
 
 class Calculator : public QWidget {
     Q_OBJECT
@@ -9,6 +13,8 @@ class Calculator : public QWidget {
 private:
     QLineEdit* display;
     QString displayContent;
+    float100 memory;
+    QPushButton* backSpace;
 
 protected:
     virtual void keyPressEvent(QKeyEvent* ke);

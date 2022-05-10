@@ -1,6 +1,6 @@
 #include "calculator.h"
 #include <QtWidgets>
-#include "stdafx.h"
+//#include "stdafx.h"
 #include "MathExpression.h"
 #include <string>
 
@@ -14,27 +14,27 @@ Calculator::Calculator(QWidget *parent)
 
     display->setAlignment(Qt::AlignRight);
     
-    QString bValues[5][4] = {
-        {"(", ")", "^", "CE"},
-        {"7", "8", "9", "/"},
-        {"4", "5", "6", "*"},
-        {"1", "2", "3", "-"},
-        {"0", ".", "=", "+"}
+    QString bValues[5][6] = {
+        {"log", "ln", "(", ")", "^", "CE"},
+        {"tan", "7", "8", "9", "/", "M+"},
+        {"cos", "4", "5", "6", "*", "M-"},
+        {"sin", "1", "2", "3", "-", "M"},
+        {"sqrt", "0", ".", "=", "+", "!"}
     };
 
     QGridLayout* gLayout = new QGridLayout;
-    gLayout->addWidget(display, 0, 0, 1, 4);
+    gLayout->addWidget(display, 0, 0, 1, 6);
 
     //Backspace symbol
-    gLayout->addWidget(createButton(QChar(0x2190)), 1, 3);
+    gLayout->addWidget(createButton(QChar(0x2190)), 1, 5);
 
     for (int row = 0; row < 5; ++row) {
-        for (int column = 0; column < 4; ++column) {
+        for (int column = 0; column < 6; ++column) {
             gLayout->addWidget(createButton(bValues[row][column]), row + 2, column);
         }
     }
     setLayout(gLayout);
-    setMaximumSize(400, 300);
+    setMaximumSize(500, 350);
 }
 
 QPushButton* Calculator::createButton(const QString& name)
@@ -78,6 +78,17 @@ void Calculator::slotButtonClicked()
     if (buttonContent == "CE"){
         display->setText("0");
         displayContent = "";
+    }
+    else if (buttonContent == "M+") {
+        displayContent = display->text();
+        memory.assign(displayContent.toStdString());
+    }
+    else if (buttonContent == "M-") {
+        memory = 0;
+    }
+    else if (buttonContent == "M") {
+        displayContent += QString::fromStdString(memory.str());
+        display->setText(displayContent);
     }
     else if (buttonContent == "=") {
         calculate();

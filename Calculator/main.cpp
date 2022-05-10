@@ -1,5 +1,5 @@
 #include "calculator.h"
-#include "stdafx.h"
+//#include "stdafx.h"
 #include <QtWidgets>
 
 int main(int argc, char *argv[])

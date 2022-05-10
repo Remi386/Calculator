@@ -18,31 +18,26 @@ public:
 class Operator : public Token
 {
 public:
+	enum class OperatorType {
+		unary,
+		binary
+	};
 
-	Operator(std::string s)
-		: oper(s)
-	{}
+	Operator(std::string s, OperatorType _type);
 
 	virtual bool isOperator() override
 	{
 		return true;
 	};
 
+	OperatorType Type()
+	{
+		return operType;
+	}
+
 	int getPriority()
 	{
-		if (oper[0] == '(')
-			return -1;
-
-		if (oper[0] == '+' || oper[0] == '-')
-			return 0;
-
-		if (oper[0] == '*' || oper[0] == '/')
-			return 1;
-
-		if (oper[0] == '^')
-			return 2;
-
-		throw std::logic_error("Wrong operator: " + oper);
+		return priority;
 	}
 
 	const std::string& getOperator()
@@ -52,6 +47,8 @@ public:
 
 private:
 	std::string oper;
+	OperatorType operType;
+	int priority = -10;
 };
 
 class Value : public Token
@@ -75,9 +72,9 @@ private:
 	float100 value;
 };
 
-int HandleOperator(std::string& str, size_t offset);
+size_t getOperatorLength(const std::string& str, size_t offset);
 
-int HandleBracket(std::string& str, size_t offset);
+int HandleToken(std::string& str, size_t offset, size_t length);
 
 void AddSpaces(std::string& str);
 
@@ -95,3 +92,8 @@ void AddOperator(std::list<std::unique_ptr<Token>>& output,
 Value DoOperation(std::unique_ptr<Token>& firstValue,
 				  std::unique_ptr<Token>& secondValue,
 				  std::unique_ptr<Token>& _oper);
+
+Value DoOperation(std::unique_ptr<Token>& _value,
+				  std::unique_ptr<Token>& _oper);
+
+Operator MakeOperator(const std::string& str, bool isPrevOperator);
