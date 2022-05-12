@@ -3,7 +3,7 @@
 #include <vector>
 
 const std::regex operators("(log|ln|sqrt|sin|cos|tan|[-*/+)(!^])");
-const std::regex binaryOperators("[-*/+)(^]");
+const std::regex binaryOperators("[-*/+^]");
 const std::regex unaryOperators("(log|ln|sqrt|sin|cos|tan|!)");
 
 Operator::Operator(std::string s, OperatorType _type)
@@ -11,24 +11,33 @@ Operator::Operator(std::string s, OperatorType _type)
 {
     if (operType == OperatorType::binary) {
 
-        if (oper.compare("(") == 0 || oper.compare(")") == 0)
-            priority = -1;
-        else if (oper.compare("+") == 0 || oper.compare("-") == 0)
+        if (oper.compare("+") == 0 || oper.compare("-") == 0)
             priority = 0;
         else if (oper.compare("*") == 0 || oper.compare("/") == 0)
             priority = 1;
         else if (oper.compare("^") == 0) 
             priority = 2;
     }
-    else {
-        if (oper.compare("sin") == 0 || oper.compare("cos") == 0 ||
-            oper.compare("tan") == 0 || oper.compare("!") == 0 ||
-            oper.compare("log") == 0 || oper.compare("ln") == 0 ||
-            oper.compare("sqrt") == 0)
-            priority = 3;
+    else if(operType == OperatorType::unary) {
 
-        if (oper.compare("-") == 0)
+        if (oper.compare("!") == 0) {
+            priority = 3;
+            position = Position::postfix;
+        }
+        else if (oper.compare("sin") == 0 || oper.compare("cos") == 0 ||
+                 oper.compare("tan") == 0 || oper.compare("sqrt") == 0 ||
+                 oper.compare("log") == 0 || oper.compare("ln") == 0)
+        {
+            priority = 3;
+            position = Position::prefix;
+        }
+        else if (oper.compare("-") == 0) {
             priority = 4;
+            position = Position::prefix;
+        }
+    }
+    else { //brackets
+        priority = -1;
     }
 
     if(priority == -10) //if priority has default value
@@ -41,7 +50,13 @@ Operator MakeOperator(const std::string& str, bool isPrevOperator)
     if (isPrevOperator && str.compare("-") == 0)
         return Operator(str, Operator::OperatorType::unary);
 
-    if (std::regex_match(str, binaryOperators))
+    if (str.compare("(") == 0)
+        return Operator(str, Operator::OperatorType::openBracket);
+    
+    if (str.compare(")") == 0)
+        return Operator(str, Operator::OperatorType::closeBracket);
+
+    if (std::regex_match(str, binaryOperators)) 
         return Operator(str, Operator::OperatorType::binary);
 
     if (std::regex_match(str, unaryOperators))
@@ -84,7 +99,7 @@ int HandleToken(std::string& str, size_t offset, size_t length)
 //Adding spaces before and after operators/brackets
 void AddSpaces(std::string& str)
 {
-    //we cant insert spaces and use regex iterators at the same string
+    //we cant insert spaces and use regex iterators in the same string
     std::string copy(str);
 
     std::sregex_iterator oper_begin(str.begin(), str.end(), operators);
@@ -109,6 +124,9 @@ void AddSpaces(std::string& str)
 
 void AppropriateView(std::string& str)
 {
+    if (str.empty())
+        return;
+
     //preventing allocations
     str.reserve(str.size() * 2 + 2);
 
@@ -149,6 +167,17 @@ std::list<std::unique_ptr<Token>> Parse(std::string& expression)
     std::list<std::unique_ptr<Token>> output;
     std::list<Operator> operators;
 
+    if (expression.empty())
+        output.push_back(std::make_unique<Value>(0));
+
+    using opType = Operator::OperatorType;
+
+    enum class tokens {
+        Operator,
+        Value,
+        Nothing
+    } prev = tokens::Nothing, needNext = tokens::Nothing;
+
     bool isPrevOperator = true;
 
     auto iterPrev = expression.begin();
@@ -158,23 +187,54 @@ std::list<std::unique_ptr<Token>> Parse(std::string& expression)
     {
         std::string token(iterPrev, iterNext);
         if (IsOperator(token)) {
-            AddOperator(output, operators, MakeOperator(token, isPrevOperator));
-            if(token != "(" && token != ")")
-                isPrevOperator = true;
+            Operator oper = MakeOperator(token, isPrevOperator);
+
+            //Checking an expression for correctness in infis notation
+            if (oper.Type() == opType::unary) {
+                if (oper.Pos() == Operator::Position::postfix) {
+                    if (prev != tokens::Value)
+                        throw std::logic_error("Didn't found value for operator: " + token);
+                }
+                else { //is prefix operator
+                    if (prev == tokens::Value)
+                        throw std::logic_error("Expected binary operator, but found: " + token);
+
+                    prev = tokens::Operator;
+                    needNext = tokens::Value;
+                }
+            }
+            else if(oper.Type() == opType::binary) {
+
+                if(prev == tokens::Operator)
+                    throw std::logic_error("Expected value, but found operator: " + token);
+
+                prev = tokens::Operator;
+                needNext = tokens::Value;
+            }
+
+            AddOperator(output, operators, oper);
+
+            if(oper.Type() == opType::binary || oper.Pos() == Operator::Position::prefix)
+                    isPrevOperator = true;
         }
-        else {
+        else { // token is value
             output.push_back(std::make_unique<Value>(float100(token)));
             isPrevOperator = false;
+            prev = tokens::Value;
+            needNext = tokens::Nothing;
         }
 
         iterPrev = iterNext + 1;
         iterNext = std::find(iterPrev, expression.end(), ' ');
     }
 
+    if (needNext != tokens::Nothing)
+        throw std::logic_error("Expected more values after operator " + operators.back().getOperator());
+
     //Adding remaining operators
     while (!operators.empty())
     {
-        if (operators.back().getOperator()[0] != '(') {
+        if (operators.back().Type() != opType::openBracket) {
             output.push_back(std::make_unique<Operator>(operators.back()));
             operators.pop_back();
         }
@@ -240,7 +300,7 @@ float100 Calculate(std::list<std::unique_ptr<Token>> output)
     return ((Value*)output.front().get())->getValue();
 }
 
-//for biniry operators
+//for binary operators
 Value DoOperation(std::unique_ptr<Token>& firstValue,
                   std::unique_ptr<Token>& secondValue,
                   std::unique_ptr<Token>& _oper)
@@ -301,14 +361,13 @@ Value DoOperation(std::unique_ptr<Token>& _value,
     throw std::logic_error("Wrong operator: " + oper);
 }
 
-
 void AddOperator(std::list<std::unique_ptr<Token>>& output,
                  std::list<Operator>& operators, Operator oper)
 {
-    if (oper.getOperator()[0] == ')') {
-        while (true) {
+    if (oper.Type() == Operator::OperatorType::closeBracket) {
+        while (true) { //pull out operator until we find open bracket
             if (!operators.empty()) {
-                if (operators.back().getOperator()[0] != '(')
+                if (operators.back().Type() != Operator::OperatorType::openBracket)
                 {
                     output.push_back(std::make_unique<Operator>(operators.back()));
                     operators.pop_back();
@@ -326,7 +385,7 @@ void AddOperator(std::list<std::unique_ptr<Token>>& output,
     else {
         while (!operators.empty()
             && operators.back().getPriority() >= oper.getPriority() 
-            && oper.getOperator()[0] != '(')
+            && oper.Type() != Operator::OperatorType::openBracket)
         {
             output.push_back(std::make_unique<Operator>(operators.back()));
             operators.pop_back();

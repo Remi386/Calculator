@@ -14,7 +14,6 @@ private:
     QLineEdit* display;
     QString displayContent;
     float100 memory;
-    QPushButton* backSpace;
 
 protected:
     virtual void keyPressEvent(QKeyEvent* ke);

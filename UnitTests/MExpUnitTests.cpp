@@ -76,10 +76,10 @@ BOOST_AUTO_TEST_CASE(CalculateTest)
 	std::string expression6 = "5.6 + 4.4 * 2 / (5.1 - 1.7)^2.7";
 	BOOST_CHECK_CLOSE(Calculate(Parse(expression6)), 5.92321357741, precision);
 
-	std::string expression7 = "!5";
+	std::string expression7 = "5!";
 	BOOST_CHECK_CLOSE(Calculate(Parse(expression7)), 120., precision);
 	
-	std::string expression8 = "!3.5";
+	std::string expression8 = "3.5!";
 	BOOST_CHECK_CLOSE(Calculate(Parse(expression8)), 11.6317283, precision);
 
 	std::string expression9 = "sqrt81";
@@ -123,4 +123,22 @@ BOOST_AUTO_TEST_CASE(CalculateTest)
 
 	std::string expression22 = "-8 + (-3 * 4) - 6 ^ -4";
 	BOOST_CHECK_CLOSE(Calculate(Parse(expression22)), -20.0007716, precision);
+
+	std::string expression23 = "+ 1 - + 2";
+	BOOST_CHECK_THROW(Parse(expression23), std::logic_error);
+
+	std::string expression24 = "1 + 2 +";
+	BOOST_CHECK_THROW(Parse(expression24), std::logic_error);
+
+	std::string expression25 = "!1";
+	BOOST_CHECK_THROW(Parse(expression25), std::logic_error);
+
+	std::string expression26 = "1! sin 2";
+	BOOST_CHECK_THROW(Parse(expression26), std::logic_error);
+
+	std::string expression27 = "sin1 cos2";
+	BOOST_CHECK_THROW(Parse(expression27), std::logic_error);
+
+	std::string expression28 = "5! + log(10)";
+	BOOST_CHECK_CLOSE(Calculate(Parse(expression28)), 121, precision);
 }

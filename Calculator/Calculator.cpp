@@ -1,7 +1,7 @@
 #include "calculator.h"
-#include <QtWidgets>
-//#include "stdafx.h"
 #include "MathExpression.h"
+#include <QtWidgets>
+#include <chrono>
 #include <string>
 
 Calculator::Calculator(QWidget *parent)
@@ -68,6 +68,7 @@ void Calculator::calculate()
     catch (std::exception& ex){
         displayContent = ex.what();
     }
+
     display->setText(displayContent);
 }
 

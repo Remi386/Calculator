@@ -20,7 +20,15 @@ class Operator : public Token
 public:
 	enum class OperatorType {
 		unary,
-		binary
+		binary,
+		openBracket,
+		closeBracket
+	};
+
+	enum class Position {
+		prefix,
+		postfix,
+		nonUnary
 	};
 
 	Operator(std::string s, OperatorType _type);
@@ -33,6 +41,11 @@ public:
 	OperatorType Type()
 	{
 		return operType;
+	}
+
+	Position Pos()
+	{
+		return position;
 	}
 
 	int getPriority()
@@ -48,6 +61,7 @@ public:
 private:
 	std::string oper;
 	OperatorType operType;
+	Position position = Position::nonUnary;
 	int priority = -10;
 };
 
