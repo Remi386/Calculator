@@ -41,8 +41,8 @@ QPushButton* Calculator::createButton(const QString& name)
 {
     QPushButton* button = new QPushButton(name);
     button->setMinimumSize(40, 30);
-    connect(button, SIGNAL(clicked()),
-            this, SLOT(slotButtonClicked()));
+    connect(button, &QPushButton::clicked,
+            this,   &Calculator::slotButtonClicked);
     return button;
 }
 
@@ -58,11 +58,11 @@ void Calculator::calculate()
 
         //if long number not in positive power
         if (!displayContent.contains("e+")) {
-            int pointIndex = displayContent.indexOf('.');
+            int64_t pointIndex = displayContent.indexOf('.');
             //10 symbols precision
             if(pointIndex != -1)
                 displayContent = displayContent.left(
-                    std::min(displayContent.size(), pointIndex + 10));
+                    std::min<int64_t>(displayContent.size(), pointIndex + 10));
         }
     }
     catch (std::exception& ex){
