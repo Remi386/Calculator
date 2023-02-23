@@ -36,7 +36,7 @@ public:
 	virtual bool isOperator() override
 	{
 		return true;
-	};
+	}
 
 	OperatorType Type()
 	{
@@ -80,34 +80,41 @@ public:
 	virtual bool isOperator() override
 	{
 		return false;
-	};
+	}
 
 private:
 	float100 value;
 };
 
-size_t getOperatorLength(const std::string& str, size_t offset);
+class MathExpression {
 
-int HandleToken(std::string& str, size_t offset, size_t length);
+public:
 
-void AddSpaces(std::string& str);
+	static float100 Calculate(std::string expression);
+	//static float100 Calculate(std::list<std::unique_ptr<Token>> output);
 
-void AppropriateView(std::string& str);
+	static bool IsSupportedOperator(const std::string& str);
 
-bool IsOperator(std::string& str);
+	static void AppropriateView(std::string& str);
 
-std::list<std::unique_ptr<Token>> Parse(std::string& expression);
+private:
 
-float100 Calculate(std::list<std::unique_ptr<Token>> output);
+	static std::list<std::unique_ptr<Token>> Parse(std::string& expression);
 
-void AddOperator(std::list<std::unique_ptr<Token>>& output,
-	std::list<Operator>& operators, Operator oper);
+	static int HandleToken(std::string& str, size_t offset, size_t length);
 
-Value DoOperation(std::unique_ptr<Token>& firstValue,
-				  std::unique_ptr<Token>& secondValue,
-				  std::unique_ptr<Token>& _oper);
+	static void AddSpaces(std::string& str);
 
-Value DoOperation(std::unique_ptr<Token>& _value,
-				  std::unique_ptr<Token>& _oper);
+	static void AddOperator(std::list<std::unique_ptr<Token>>& output,
+							std::list<Operator>& operators, Operator oper);
 
-Operator MakeOperator(const std::string& str, bool isPrevOperator);
+	static Value DoOperation(std::unique_ptr<Token>& firstValue,
+						     std::unique_ptr<Token>& secondValue,
+					         std::unique_ptr<Token>& _oper);
+
+	static Value DoOperation(std::unique_ptr<Token>& _value,
+							 std::unique_ptr<Token>& _oper);
+
+	static Operator MakeOperator(const std::string& str, bool isPrevOperator);
+
+};

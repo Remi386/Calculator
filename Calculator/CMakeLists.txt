@@ -29,6 +29,11 @@ target_link_libraries(Calculator
 					  Qt::Core
 					  Qt::Widgets)
 					  
+set_target_properties(Calculator 
+					  PROPERTIES
+					  WIN32_EXECUTABLE ON
+					  MACOSX_BUNDLE ON)
+					  
 if(DEFINED WIN32)
 	include(../cmake/deploy_util.cmake)
 	WinDeployApplication(Calculator)

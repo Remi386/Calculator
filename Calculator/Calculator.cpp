@@ -1,5 +1,4 @@
 #include "calculator.h"
-#include "MathExpression.h"
 #include <QtWidgets>
 #include <chrono>
 #include <string>
@@ -52,7 +51,8 @@ void Calculator::calculate()
     
     std::string result;
     try {
-        result = Calculate(Parse(expression)).str();
+        
+        result = MathExpression::Calculate(expression).str();
 
         displayContent = QString::fromStdString(result);
 
@@ -65,7 +65,8 @@ void Calculator::calculate()
                     std::min<int64_t>(displayContent.size(), pointIndex + 10));
         }
     }
-    catch (std::exception& ex){
+    catch (const std::exception& ex) {
+        needCleanInput = true;
         displayContent = ex.what();
     }
 
@@ -76,9 +77,16 @@ void Calculator::slotButtonClicked()
 {
     QString buttonContent = ((QPushButton*)sender())->text();
 
-    if (buttonContent == "CE"){
+    if (needCleanInput) { //exception was thrown
         display->setText("0");
         displayContent = "";
+        needCleanInput = false;
+    }
+
+    if (buttonContent == "CE") {
+        display->setText("0");
+        displayContent = "";
+        needCleanInput = false;
     }
     else if (buttonContent == "M+") {
         displayContent = display->text();

@@ -1,86 +1,133 @@
 #include "MathExpression.h"
 #include <regex>
 #include <vector>
+#include <unordered_map>
+#include <unordered_set>
+#include <boost/function.hpp>
+#include <string>
+#include <iostream>
 
-const std::regex operators("(log|ln|sqrt|sin|cos|tan|[-*/+)(!^])");
-const std::regex binaryOperators("[-*/+^]");
-const std::regex unaryOperators("(log|ln|sqrt|sin|cos|tan|!)");
+using OperType = Operator::OperatorType;
+using OperPos = Operator::Position;
+
+struct BinaryOperatorInformation
+{
+    short operatorPriority = 0;
+    OperType operatorType = OperType::unary;
+    boost::function<float100(float100, float100)> functor;
+};
+
+struct UnaryOperatorInformation
+{
+    short operatorPriority;
+    OperType operatorType;
+    OperPos operatorPosition;
+    boost::function<float100(float100)> functor;
+};
+
+const std::unordered_map<std::string_view, BinaryOperatorInformation> binaryOperators = 
+{
+    {"+", { 0, OperType::binary, [](const float100& lhs, const float100& rhs) { return lhs + rhs; } } },
+    {"-", { 0, OperType::binary, [](const float100& lhs, const float100& rhs) { return lhs - rhs; } } },
+    {"*", { 1, OperType::binary, [](const float100& lhs, const float100& rhs) { return lhs * rhs; } } },
+    {"/", { 1, OperType::binary, [](const float100& lhs, const float100& rhs) { return lhs / rhs; } } },
+    {"^", { 2, OperType::binary, [](const float100& lhs, const float100& rhs) { return boost::multiprecision::pow(lhs, rhs); } } }
+};
+
+const std::unordered_map<std::string_view, UnaryOperatorInformation> unaryOperators =
+{
+    {"log",  { 3, OperType::unary, OperPos::prefix,  [](const float100& value) { return boost::multiprecision::log10(value); } } },
+    {"ln",   { 3, OperType::unary, OperPos::prefix,  [](const float100& value) { return boost::multiprecision::log(value);   } } },
+    {"sqrt", { 3, OperType::unary, OperPos::prefix,  [](const float100& value) { return boost::multiprecision::sqrt(value);  } } },
+    {"sin",  { 3, OperType::unary, OperPos::prefix,  [](const float100& value) { return boost::multiprecision::sin(value);   } } },
+    {"cos",  { 3, OperType::unary, OperPos::prefix,  [](const float100& value) { return boost::multiprecision::cos(value);   } } },
+    {"tan",  { 3, OperType::unary, OperPos::prefix,  [](const float100& value) { return boost::multiprecision::tan(value);   } } },
+    {"!",    { 3, OperType::unary, OperPos::postfix, [](const float100& value) { return boost::multiprecision::tgamma(value + 1); } } },
+    {"-",    { 4, OperType::unary, OperPos::prefix,  [](const float100& value) { return -value; } } }
+};
+
+std::regex InitOperators() 
+{
+    std::string operators;
+    std::unordered_set<char> oneCharOperators;
+
+    auto addOperatorNamesToRegex = [&](const auto& mapPair) 
+    {
+        if (mapPair.first.size() == 1)
+            oneCharOperators.insert(mapPair.first[0]);
+        else
+        {
+            operators.append(mapPair.first);
+            operators.push_back('|');
+        }
+    };
+
+    std::for_each(binaryOperators.begin(), binaryOperators.end(), addOperatorNamesToRegex);
+    std::for_each(unaryOperators.begin(),  unaryOperators.end(),  addOperatorNamesToRegex);
+
+    if (oneCharOperators.size() > 0) {
+        operators.push_back('[');
+        
+        operators.append("\\)\\(");
+        
+        for (const char charOperator : oneCharOperators) {
+            operators.push_back('\\'); //Escape them
+            operators.push_back(charOperator);
+        }
+        
+        operators.push_back(']');
+    }
+
+
+    return std::regex(operators);
+}
+
+const std::regex allOperatorsRegex = InitOperators();
 
 Operator::Operator(std::string s, OperatorType _type)
-    : oper(s), operType(_type)
+    : oper(std::move(s)), operType(_type)
 {
     if (operType == OperatorType::binary) {
-
-        if (oper.compare("+") == 0 || oper.compare("-") == 0)
-            priority = 0;
-        else if (oper.compare("*") == 0 || oper.compare("/") == 0)
-            priority = 1;
-        else if (oper.compare("^") == 0) 
-            priority = 2;
+        if (binaryOperators.contains(oper))
+            priority = binaryOperators.at(oper).operatorPriority;
     }
-    else if(operType == OperatorType::unary) {
+    else if (operType == OperatorType::unary) {
 
-        if (oper.compare("!") == 0) {
-            priority = 3;
-            position = Position::postfix;
-        }
-        else if (oper.compare("sin") == 0 || oper.compare("cos") == 0 ||
-                 oper.compare("tan") == 0 || oper.compare("sqrt") == 0 ||
-                 oper.compare("log") == 0 || oper.compare("ln") == 0)
-        {
-            priority = 3;
-            position = Position::prefix;
-        }
-        else if (oper.compare("-") == 0) {
-            priority = 4;
-            position = Position::prefix;
+        if (unaryOperators.contains(oper)) {
+            priority = unaryOperators.at(oper).operatorPriority;
+            position = unaryOperators.at(oper).operatorPosition;
         }
     }
     else { //brackets
         priority = -1;
     }
 
-    if(priority == -10) //if priority has default value
+    if (priority == -10) //if priority has default value
         throw std::logic_error("Wrong operator: " + oper);
 }
 
-Operator MakeOperator(const std::string& str, bool isPrevOperator)
+Operator MathExpression::MakeOperator(const std::string& str, bool isPrevOperator)
 {
     //unary minus
-    if (isPrevOperator && str.compare("-") == 0)
-        return Operator(str, Operator::OperatorType::unary);
+    if (isPrevOperator && str == "-")
+        return Operator(str, OperType::unary);
 
-    if (str.compare("(") == 0)
-        return Operator(str, Operator::OperatorType::openBracket);
-    
-    if (str.compare(")") == 0)
-        return Operator(str, Operator::OperatorType::closeBracket);
+    if (str == "(")
+        return Operator(str, OperType::openBracket);
 
-    if (std::regex_match(str, binaryOperators)) 
-        return Operator(str, Operator::OperatorType::binary);
+    if (str == ")")
+        return Operator(str, OperType::closeBracket);
 
-    if (std::regex_match(str, unaryOperators))
-        return Operator(str, Operator::OperatorType::unary);
+    if (binaryOperators.contains(str))
+        return Operator(str, OperType::binary);
+
+    if (unaryOperators.contains(str))
+        return Operator(str, OperType::unary);
 
     throw std::logic_error("Wrong operator: " + str);
 }
 
-size_t getOperatorLength(const std::string& str, size_t offset)
-{
-    if (str.substr(offset, 2) == "ln")
-        return 1;
-
-    if (str.substr(offset, 3) == "cos" || str.substr(offset, 3) == "sin" ||
-        str.substr(offset, 3) == "tan" || str.substr(offset, 3) == "log")
-        return 2;
-
-    if (str.substr(offset, 4) == "sqrt")
-        return 3;
-
-    return 0;
-}
-
-int HandleToken(std::string& str, size_t offset, size_t length)
+int MathExpression::HandleToken(std::string& str, size_t offset, size_t length)
 {
     int spacesCount = 0;
 
@@ -97,12 +144,12 @@ int HandleToken(std::string& str, size_t offset, size_t length)
 }
 
 //Adding spaces before and after operators/brackets
-void AddSpaces(std::string& str)
+void MathExpression::AddSpaces(std::string& str)
 {
     //we cant insert spaces and use regex iterators in the same string
     std::string copy(str);
 
-    std::sregex_iterator oper_begin(str.begin(), str.end(), operators);
+    std::sregex_iterator oper_begin(str.begin(), str.end(), allOperatorsRegex);
     std::sregex_iterator oper_end = std::sregex_iterator();
 
     //counting how many spaces we inserted to calculate offset
@@ -113,7 +160,9 @@ void AddSpaces(std::string& str)
         std::smatch match = *oper_begin;
 
         size_t offset = match.position();
-        size_t length = getOperatorLength(str, offset);
+
+        size_t length = match.length() - 1;
+        //length = getOperatorLength(str, offset);
 
         spacesCount += HandleToken(copy, offset + spacesCount, length);
 
@@ -122,7 +171,7 @@ void AddSpaces(std::string& str)
     str = copy;
 }
 
-void AppropriateView(std::string& str)
+void MathExpression::AppropriateView(std::string& str)
 {
     if (str.empty())
         return;
@@ -145,22 +194,20 @@ void AppropriateView(std::string& str)
         index = str.find("  ");
     }
 
-    //deleting spaces in the beginning
+    //deleting spaces at the beginning
     while (str[0] == ' ')
         str.erase(0, 1);
 
     str.shrink_to_fit();
 }
 
-bool IsOperator(std::string& str)
+bool MathExpression::IsSupportedOperator(const std::string& str)
 {
-    if (str.size() > 4 || str.empty())
-        return false;
-
-    return std::regex_search(str, operators);
+    return std::regex_search(str, allOperatorsRegex);
 }
 
-std::list<std::unique_ptr<Token>> Parse(std::string& expression)
+std::list<std::unique_ptr<Token>> 
+    MathExpression::Parse(std::string& expression)
 {
     AppropriateView(expression);
 
@@ -168,15 +215,13 @@ std::list<std::unique_ptr<Token>> Parse(std::string& expression)
     std::list<Operator> operators;
 
     if (expression.empty())
-        output.push_back(std::make_unique<Value>(0));
-
-    using opType = Operator::OperatorType;
+        output.push_back(std::make_unique<Value>(0.0));
 
     enum class tokens {
         Operator,
         Value,
-        Nothing
-    } prev = tokens::Nothing, needNext = tokens::Nothing;
+        None
+    } prev = tokens::None, needNext = tokens::None;
 
     bool isPrevOperator = true;
 
@@ -186,12 +231,12 @@ std::list<std::unique_ptr<Token>> Parse(std::string& expression)
     while (iterNext != expression.end())
     {
         std::string token(iterPrev, iterNext);
-        if (IsOperator(token)) {
+        if (IsSupportedOperator(token)) {
             Operator oper = MakeOperator(token, isPrevOperator);
 
             //Checking an expression for correctness in infis notation
-            if (oper.Type() == opType::unary) {
-                if (oper.Pos() == Operator::Position::postfix) {
+            if (oper.Type() == OperType::unary) {
+                if (oper.Pos() == OperPos::postfix) {
                     if (prev != tokens::Value)
                         throw std::logic_error("Didn't found value for operator: " + token);
                 }
@@ -203,9 +248,9 @@ std::list<std::unique_ptr<Token>> Parse(std::string& expression)
                     needNext = tokens::Value;
                 }
             }
-            else if(oper.Type() == opType::binary) {
+            else if (oper.Type() == OperType::binary) {
 
-                if(prev == tokens::Operator)
+                if (prev == tokens::Operator)
                     throw std::logic_error("Expected value, but found operator: " + token);
 
                 prev = tokens::Operator;
@@ -214,40 +259,43 @@ std::list<std::unique_ptr<Token>> Parse(std::string& expression)
 
             AddOperator(output, operators, oper);
 
-            if(oper.Type() == opType::binary || oper.Pos() == Operator::Position::prefix)
-                    isPrevOperator = true;
+            if (oper.Type() == OperType::binary || oper.Pos() == OperPos::prefix)
+                isPrevOperator = true;
         }
         else { // token is value
             output.push_back(std::make_unique<Value>(float100(token)));
             isPrevOperator = false;
             prev = tokens::Value;
-            needNext = tokens::Nothing;
+            needNext = tokens::None;
         }
 
         iterPrev = iterNext + 1;
         iterNext = std::find(iterPrev, expression.end(), ' ');
     }
 
-    if (needNext != tokens::Nothing)
+    if (needNext != tokens::None)
         throw std::logic_error("Expected more values after operator " + operators.back().getOperator());
 
     //Adding remaining operators
     while (!operators.empty())
     {
-        if (operators.back().Type() != opType::openBracket) {
-            output.push_back(std::make_unique<Operator>(operators.back()));
-            operators.pop_back();
+        if (operators.back().Type() == OperType::openBracket) {
+            throw std::logic_error("Bracket mismatch: missing close bracket");
         }
         else {
-            throw std::logic_error("Bracket mismatch: missing close bracket");
+            output.push_back(std::make_unique<Operator>(operators.back()));
+            operators.pop_back();
         }
     }
 
     return output;
 }
 
-float100 Calculate(std::list<std::unique_ptr<Token>> output)
+//float100 MathExpression::Calculate(std::list<std::unique_ptr<Token>> output)
+float100 MathExpression::Calculate(std::string expression)
 {
+    std::list<std::unique_ptr<Token>> output = Parse(expression);
+
     //There will be one item at the end
     while (output.size() != 1)
     {
@@ -273,13 +321,13 @@ float100 Calculate(std::list<std::unique_ptr<Token>> output)
         std::list<std::unique_ptr<Token>>::iterator secondValue = output.end();
 
         //if operator is binary
-        if (static_cast<Operator*>(oper->get())->Type() == Operator::OperatorType::binary)
+        if (static_cast<Operator*>(oper->get())->Type() == OperType::binary)
             secondValue = Decrement(tmp); // than we have a second value
 
         std::list<std::unique_ptr<Token>>::iterator firstValue = Decrement(tmp);
 
         //if first value or second value are not really a values
-        if((*firstValue)->isOperator() && secondValue != output.end() && (*secondValue)->isOperator())
+        if ((*firstValue)->isOperator() && secondValue != output.end() && (*secondValue)->isOperator())
             throw std::logic_error("Wrong sequence!");
 
         std::unique_ptr<Token> result;
@@ -301,73 +349,40 @@ float100 Calculate(std::list<std::unique_ptr<Token>> output)
 }
 
 //for binary operators
-Value DoOperation(std::unique_ptr<Token>& firstValue,
-                  std::unique_ptr<Token>& secondValue,
-                  std::unique_ptr<Token>& _oper)
+Value MathExpression::DoOperation(std::unique_ptr<Token>& firstValue,
+                                  std::unique_ptr<Token>& secondValue,
+                                  std::unique_ptr<Token>& _oper)
 {
-    auto& fValue = static_cast<Value*>(firstValue.get())->getValue();
-    auto& sValue = static_cast<Value*>(secondValue.get())->getValue();
-    auto& oper = static_cast<Operator*>(_oper.get())->getOperator();
+    const float100& fValue = static_cast<Value*>(firstValue.get())->getValue();
+    const float100& sValue = static_cast<Value*>(secondValue.get())->getValue();
+    const std::string& oper = static_cast<Operator*>(_oper.get())->getOperator();
 
-    if (oper.compare("+") == 0)
-        return Value(fValue + sValue);
+    if (!binaryOperators.contains(oper))
+        throw std::logic_error("Wrong operator: " + oper);
 
-    if (oper.compare("-") == 0)
-        return Value(fValue - sValue);
-
-    if (oper.compare("*") == 0)
-        return Value(fValue * sValue);
-
-    if (oper.compare("/") == 0)
-        return Value(fValue / sValue);
-
-    if (oper.compare("^") == 0)
-        return Value(boost::multiprecision::pow(fValue, sValue));
-
-    throw std::logic_error("Wrong operator: " + oper);
+    return binaryOperators.at(oper).functor(fValue, sValue);
 }
 
 //for unary operators
-Value DoOperation(std::unique_ptr<Token>& _value,
-                  std::unique_ptr<Token>& _oper)
+Value MathExpression::DoOperation(std::unique_ptr<Token>& _value,
+                                  std::unique_ptr<Token>& _oper)
 {
-    auto& value = static_cast<Value*>(_value.get())->getValue();
-    auto& oper = static_cast<Operator*>(_oper.get())->getOperator();
+    const float100& value = static_cast<Value*>(_value.get())->getValue();
+    const std::string& oper = static_cast<Operator*>(_oper.get())->getOperator();
 
-    if (oper.compare("!") == 0)
-        return Value(boost::math::tgamma(value + 1));
+    if (!unaryOperators.contains(oper))
+        throw std::logic_error("Wrong operator: " + oper);
 
-    if (oper.compare("sin") == 0)
-        return Value(boost::multiprecision::sin(value));
-    
-    if (oper.compare("cos") == 0)
-        return Value(boost::multiprecision::cos(value));
-
-    if (oper.compare("tan") == 0)
-        return Value(boost::multiprecision::tan(value));
-
-    if (oper.compare("sqrt") == 0)
-        return Value(boost::multiprecision::sqrt(value));
-
-    if (oper.compare("log") == 0)
-        return Value(boost::multiprecision::log10(value));
-
-    if (oper.compare("ln") == 0)
-        return Value(boost::multiprecision::log(value));
-
-    if (oper.compare("-") == 0)
-        return Value(-value);
-
-    throw std::logic_error("Wrong operator: " + oper);
+    return unaryOperators.at(oper).functor(value);
 }
 
-void AddOperator(std::list<std::unique_ptr<Token>>& output,
-                 std::list<Operator>& operators, Operator oper)
+void MathExpression::AddOperator(std::list<std::unique_ptr<Token>>& output,
+                                 std::list<Operator>& operators, Operator oper)
 {
-    if (oper.Type() == Operator::OperatorType::closeBracket) {
+    if (oper.Type() == OperType::closeBracket) {
         while (true) { //pull out operator until we find open bracket
             if (!operators.empty()) {
-                if (operators.back().Type() != Operator::OperatorType::openBracket)
+                if (operators.back().Type() != OperType::openBracket)
                 {
                     output.push_back(std::make_unique<Operator>(operators.back()));
                     operators.pop_back();
@@ -384,8 +399,8 @@ void AddOperator(std::list<std::unique_ptr<Token>>& output,
     }
     else {
         while (!operators.empty()
-            && operators.back().getPriority() >= oper.getPriority() 
-            && oper.Type() != Operator::OperatorType::openBracket)
+            && operators.back().getPriority() >= oper.getPriority()
+            && oper.Type() != OperType::openBracket)
         {
             output.push_back(std::make_unique<Operator>(operators.back()));
             operators.pop_back();

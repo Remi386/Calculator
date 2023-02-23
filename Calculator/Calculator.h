@@ -2,7 +2,7 @@
 
 #include <QtWidgets/QWidget>
 #include <boost/multiprecision/cpp_dec_float.hpp>
-using float100 = boost::multiprecision::cpp_dec_float_100;
+#include "MathExpression.h"
 
 class QLineEdit;
 class QPushButton;
@@ -14,6 +14,7 @@ private:
     QLineEdit* display;
     QString displayContent;
     float100 memory;
+    bool needCleanInput = false;
 
 protected:
     virtual void keyPressEvent(QKeyEvent* ke);
